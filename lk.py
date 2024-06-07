@@ -1,14 +1,23 @@
+from flask import Flask, request
+import logging
 import discord
 from discord.ext import commands, tasks
 import asyncio
 from datetime import datetime, timedelta
-import os  # Import the os module to access environment variables
-from flask import Flask
+import os
+from dotenv import load_dotenv
 from threading import Thread
 
-intents = discord.Intents.default()
-intents.message_content = True
+load_dotenv()
 
+# Define intents
+intents = discord.Intents.default()
+if hasattr(intents, 'message_content'):
+    intents.message_content = True
+else:
+    print("The current version of discord.py does not support 'message_content' intent. Please update to discord.py 2.0 or higher.")
+
+# Create bot instance
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Dictionary to store series information
@@ -35,11 +44,12 @@ series_info = {
     }
 }
 
-vip_channel_id = 1228948429019811940  # Replace with your VIP channel ID
-late_channel_id = 1228948547827925104  # Replace with your "10 mins late" channel ID
-time_remaining_channel_id = 1247835352941596742  # Replace with your time remaining channel ID
+# Channel and role IDs
+vip_channel_id = 1228948429019811940
+late_channel_id = 1228948547827925104
+time_remaining_channel_id = 1247835352941596742
 all_series_role_id = 1228965477670457364
-vip_role_id = 1228969150039457833  # Replace with your VIP role ID
+vip_role_id = 1228969150039457833
 
 ongoing_notifications = []
 
@@ -71,7 +81,12 @@ async def update_time_remaining():
     new_ongoing_notifications = []
 
     time_remaining_channel = bot.get_channel(time_remaining_channel_id)
-    await time_remaining_channel.purge()
+    
+    # Purge old messages if we have the manage_messages permission
+    try:
+        await time_remaining_channel.purge()
+    except discord.Forbidden:
+        print("Bot lacks permission to manage messages in the time remaining channel.")
 
     for series_abbr, chapter_number, release_time in ongoing_notifications:
         series = series_info[series_abbr]
@@ -97,14 +112,15 @@ async def update_time_remaining():
     ongoing_notifications[:] = new_ongoing_notifications
 
 # Flask app to keep the Glitch project alive
-app = Flask('')
+app = Flask(__name__)
 
 @app.route('/')
 def home():
+    app.logger.info('Home endpoint accessed.')
     return "I'm alive"
 
 def run():
-    app.run(host='0.0.0.0', port=9000)
+    app.run(host='0.0.0.0', port=8081)
 
 def keep_alive():
     t = Thread(target=run)
@@ -114,5 +130,4 @@ def keep_alive():
 keep_alive()
 
 # Run the bot with your token from the environment variable
-bot_token = os.getenv('BOT_TOKEN')
-bot.run(bot_token)
+bot.run(os.getenv('BOT_TOKEN'))
