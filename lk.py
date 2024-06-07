@@ -113,5 +113,6 @@ def keep_alive():
 # Call keep_alive to start the Flask app
 keep_alive()
 
-# Run the bot with your token directly
-bot.run('MTI0Nzc4MzE0Njk4NDgzNzEyMg.GHVxhC.YbG6BnfSexTRsCjeuUlbReQl2rXo94dheEYJ2c')
+# Run the bot with your token from the environment variable
+bot_token = os.getenv('BOT_TOKEN')
+bot.run(bot_token)
