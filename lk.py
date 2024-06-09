@@ -101,6 +101,22 @@ async def notify(ctx, series_abbr: str, chapter_number: int, duration: int):
 
     await ctx.send(f"Notification scheduled for {series['name']} chapter {chapter_number}.")
 
+@bot.command()
+async def release(ctx, series_abbr: str, chapter_number: int):
+    series = series_info.get(series_abbr.upper())
+    if not series:
+        await ctx.send("Series not found.")
+        return
+
+    late_channel = bot.get_channel(late_channel_id)
+    late_message = (
+        f"<@&{all_series_role_id}> <@&{series['role_id']}>\n"
+        f"**{series['name']}** chapter **{chapter_number}** has been released!\n"
+        f"{series['url'].replace('xx', str(chapter_number))}"
+    )
+    await late_channel.send(late_message)
+    await ctx.send(f"Release message sent for {series['name']} chapter {chapter_number}.")
+
 async def adjust_remaining_time():
     now = datetime.utcnow()
     time_remaining_channel = bot.get_channel(time_remaining_channel_id)
@@ -159,6 +175,8 @@ async def update_time_remaining():
 @bot.event
 async def on_message(message):
     if message.channel.id == ready_channel_id and message.content.startswith('!notify'):
+        await bot.process_commands(message)
+    elif message.channel.id == ready_channel_id and message.content.startswith('!release'):
         await bot.process_commands(message)
     else:
         await bot.process_commands(message)
