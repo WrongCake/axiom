@@ -170,8 +170,17 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
+# Reconnection mechanism
+async def start_bot():
+    while True:
+        try:
+            await bot.start(os.getenv('BOT_TOKEN'))
+        except Exception as e:
+            print(f"Bot disconnected due to {e}, reconnecting in 5 seconds...")
+            await asyncio.sleep(5)
+
 # Call keep_alive to start the Flask app
 keep_alive()
 
-# Run the bot with your token from the environment variable
-bot.run(os.getenv('BOT_TOKEN'))
+# Start the bot
+asyncio.run(start_bot())
