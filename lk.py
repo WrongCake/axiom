@@ -156,6 +156,13 @@ async def update_time_remaining():
     ongoing_notifications[:] = new_ongoing_notifications
     save_state()
 
+@bot.event
+async def on_message(message):
+    if message.channel.id == ready_channel_id and message.content.startswith('!notify'):
+        await bot.process_commands(message)
+    else:
+        await bot.process_commands(message)
+
 # Flask app to keep the hosting service alive
 app = Flask(__name__)
 
