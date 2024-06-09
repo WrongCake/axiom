@@ -50,6 +50,7 @@ late_channel_id = 1228948547827925104
 time_remaining_channel_id = 1247835352941596742
 all_series_role_id = 1228965477670457364
 vip_role_id = 1228969150039457833
+ready_channel_id = 1228986706632380416  # Channel for "I am ready!" message
 
 ongoing_notifications = []
 
@@ -60,27 +61,14 @@ def load_state():
     try:
         with open(STATE_FILE, 'r') as f:
             data = json.load(f)
-            last_save_time = datetime.fromisoformat(data['last_save_time'])
-            notifications = data['notifications']
-            now = datetime.utcnow()
-            offline_duration = now - last_save_time
-            ongoing_notifications = [
-                (item['series_abbr'], item['chapter_number'], datetime.fromisoformat(item['release_time']) - offline_duration)
-                for item in notifications
-            ]
-            print("State loaded from file and adjusted for offline duration.")
+            ongoing_notifications = [(item['series_abbr'], item['chapter_number'], datetime.fromisoformat(item['release_time'])) for item in data]
+            print("State loaded from file.")
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print("No previous state found or error loading state:", e)
 
 def save_state():
     with open(STATE_FILE, 'w') as f:
-        data = {
-            'last_save_time': datetime.utcnow().isoformat(),
-            'notifications': [
-                {'series_abbr': series_abbr, 'chapter_number': chapter_number, 'release_time': release_time.isoformat()}
-                for series_abbr, chapter_number, release_time in ongoing_notifications
-            ]
-        }
+        data = [{'series_abbr': series_abbr, 'chapter_number': chapter_number, 'release_time': release_time.isoformat()} for series_abbr, chapter_number, release_time in ongoing_notifications]
         json.dump(data, f)
         print("State saved to file.")
 
@@ -88,11 +76,12 @@ def save_state():
 async def on_ready():
     print(f'Bot is ready as {bot.user}')
     load_state()
+    await adjust_remaining_time()
     update_time_remaining.start()
     # Sending a message to indicate bot is ready
-    source_channel = bot.get_channel(vip_channel_id)
-    if source_channel:
-        await source_channel.send("I am ready!")
+    ready_channel = bot.get_channel(ready_channel_id)
+    if ready_channel:
+        await ready_channel.send("I am ready!")
 
 @bot.command()
 async def notify(ctx, series_abbr: str, chapter_number: int, duration: int):
@@ -111,6 +100,24 @@ async def notify(ctx, series_abbr: str, chapter_number: int, duration: int):
     save_state()
 
     await ctx.send(f"Notification scheduled for {series['name']} chapter {chapter_number}.")
+
+async def adjust_remaining_time():
+    now = datetime.utcnow()
+    time_remaining_channel = bot.get_channel(time_remaining_channel_id)
+    async for message in time_remaining_channel.history(limit=1):
+        # Assuming the message format is consistent, we extract the remaining time
+        content = message.content
+        for series_abbr, chapter_number, release_time in ongoing_notifications:
+            series = series_info[series_abbr]
+            if f"**{series['name']}** chapter **{chapter_number}** releases in" in content:
+                time_left_str = content.split('releases in ')[1]
+                hours, minutes = map(int, time_left_str.split('h ')[0]), int(time_left_str.split('h ')[1].split('m')[0])
+                offline_duration = now - message.created_at
+                remaining_time = timedelta(hours=hours, minutes=minutes) - offline_duration
+                new_release_time = now + remaining_time
+                ongoing_notifications.append((series_abbr, chapter_number, new_release_time))
+                ongoing_notifications.remove((series_abbr, chapter_number, release_time))
+                break
 
 @tasks.loop(minutes=1)
 async def update_time_remaining():
