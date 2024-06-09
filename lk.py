@@ -1,12 +1,12 @@
-from flask import Flask, request
-import logging
+import os
 import discord
 from discord.ext import commands, tasks
 import asyncio
 from datetime import datetime, timedelta
-import os
-from dotenv import load_dotenv
+import json
+from flask import Flask
 from threading import Thread
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -53,10 +53,46 @@ vip_role_id = 1228969150039457833
 
 ongoing_notifications = []
 
+STATE_FILE = 'bot_state.json'
+
+def load_state():
+    global ongoing_notifications
+    try:
+        with open(STATE_FILE, 'r') as f:
+            data = json.load(f)
+            last_save_time = datetime.fromisoformat(data['last_save_time'])
+            notifications = data['notifications']
+            now = datetime.utcnow()
+            offline_duration = now - last_save_time
+            ongoing_notifications = [
+                (item['series_abbr'], item['chapter_number'], datetime.fromisoformat(item['release_time']) - offline_duration)
+                for item in notifications
+            ]
+            print("State loaded from file and adjusted for offline duration.")
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print("No previous state found or error loading state:", e)
+
+def save_state():
+    with open(STATE_FILE, 'w') as f:
+        data = {
+            'last_save_time': datetime.utcnow().isoformat(),
+            'notifications': [
+                {'series_abbr': series_abbr, 'chapter_number': chapter_number, 'release_time': release_time.isoformat()}
+                for series_abbr, chapter_number, release_time in ongoing_notifications
+            ]
+        }
+        json.dump(data, f)
+        print("State saved to file.")
+
 @bot.event
 async def on_ready():
     print(f'Bot is ready as {bot.user}')
+    load_state()
     update_time_remaining.start()
+    # Sending a message to indicate bot is ready
+    source_channel = bot.get_channel(vip_channel_id)
+    if source_channel:
+        await source_channel.send("I am ready!")
 
 @bot.command()
 async def notify(ctx, series_abbr: str, chapter_number: int, duration: int):
@@ -72,6 +108,7 @@ async def notify(ctx, series_abbr: str, chapter_number: int, duration: int):
 
     release_time = datetime.utcnow() + timedelta(hours=duration)
     ongoing_notifications.append((series_abbr.upper(), chapter_number, release_time))
+    save_state()
 
     await ctx.send(f"Notification scheduled for {series['name']} chapter {chapter_number}.")
 
@@ -110,13 +147,13 @@ async def update_time_remaining():
             await time_remaining_channel.send(time_remaining_message)
 
     ongoing_notifications[:] = new_ongoing_notifications
+    save_state()
 
-# Flask app to keep the Glitch project alive
+# Flask app to keep the hosting service alive
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    app.logger.info('Home endpoint accessed.')
     return "I'm alive"
 
 def run():
