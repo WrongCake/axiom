@@ -119,21 +119,12 @@ async def release(ctx, series_abbr: str, chapter_number: int):
 
 async def adjust_remaining_time():
     now = datetime.utcnow()
-    time_remaining_channel = bot.get_channel(time_remaining_channel_id)
-    async for message in time_remaining_channel.history(limit=1):
-        # Assuming the message format is consistent, we extract the remaining time
-        content = message.content
-        for series_abbr, chapter_number, release_time in ongoing_notifications:
-            series = series_info[series_abbr]
-            if f"**{series['name']}** chapter **{chapter_number}** releases in" in content:
-                time_left_str = content.split('releases in ')[1]
-                hours, minutes = map(int, time_left_str.split('h ')[0]), int(time_left_str.split('h ')[1].split('m')[0])
-                offline_duration = now - message.created_at
-                remaining_time = timedelta(hours=hours, minutes=minutes) - offline_duration
-                new_release_time = now + remaining_time
-                ongoing_notifications.append((series_abbr, chapter_number, new_release_time))
-                ongoing_notifications.remove((series_abbr, chapter_number, release_time))
-                break
+    for i, (series_abbr, chapter_number, release_time) in enumerate(ongoing_notifications):
+        if release_time > now:
+            offline_duration = now - bot.uptime  # Duration bot was offline
+            adjusted_release_time = release_time + offline_duration
+            ongoing_notifications[i] = (series_abbr, chapter_number, adjusted_release_time)
+    save_state()
 
 @tasks.loop(minutes=1)
 async def update_time_remaining():
@@ -199,6 +190,7 @@ def keep_alive():
 async def start_bot():
     while True:
         try:
+            bot.uptime = datetime.utcnow()
             await bot.start(os.getenv('BOT_TOKEN'))
         except Exception as e:
             print(f"Bot disconnected due to {e}, reconnecting in 5 seconds...")
