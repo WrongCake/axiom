@@ -188,15 +188,6 @@ async def on_message(message):
     else:
         await bot.process_commands(message)
 
-    # Automatically spoiler-tag images
-    if message.attachments:
-        for attachment in message.attachments:
-            if not attachment.is_spoiler():
-                await message.delete()
-                spoiler_files = [await attachment.to_file(spoiler=True) for attachment in message.attachments]
-                await message.channel.send(files=spoiler_files)
-                break
-
 # Flask app to keep the hosting service alive
 app = Flask(__name__)
 
