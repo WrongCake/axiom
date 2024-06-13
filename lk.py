@@ -55,6 +55,7 @@ ready_channel_id = 1228986706632380416  # Channel for "I am ready!" message
 ongoing_notifications = []
 
 STATE_FILE = 'bot_state.json'
+LAST_RUN_FILE = 'last_run.txt'
 
 def load_state():
     global ongoing_notifications
@@ -72,6 +73,18 @@ def save_state():
         json.dump(data, f)
         print("State saved to file.")
 
+def load_last_run_time():
+    try:
+        with open(LAST_RUN_FILE, 'r') as f:
+            last_run = f.read().strip()
+            return datetime.fromisoformat(last_run)
+    except (FileNotFoundError, ValueError):
+        return None
+
+def save_last_run_time():
+    with open(LAST_RUN_FILE, 'w') as f:
+        f.write(datetime.utcnow().isoformat())
+
 @bot.event
 async def on_ready():
     print(f'Bot is ready as {bot.user}')
@@ -82,6 +95,7 @@ async def on_ready():
     ready_channel = bot.get_channel(ready_channel_id)
     if ready_channel:
         await ready_channel.send("I am ready!")
+    save_last_run_time()
 
 @bot.command()
 async def notify(ctx, series_abbr: str, chapter_number: int, duration: int):
@@ -119,11 +133,13 @@ async def release(ctx, series_abbr: str, chapter_number: int):
 
 async def adjust_remaining_time():
     now = datetime.utcnow()
-    for i, (series_abbr, chapter_number, release_time) in enumerate(ongoing_notifications):
-        if release_time > now:
-            offline_duration = now - bot.uptime  # Duration bot was offline
-            adjusted_release_time = release_time + offline_duration
-            ongoing_notifications[i] = (series_abbr, chapter_number, adjusted_release_time)
+    last_run = load_last_run_time()
+    if last_run:
+        offline_duration = now - last_run
+        for i, (series_abbr, chapter_number, release_time) in enumerate(ongoing_notifications):
+            if release_time > last_run:
+                adjusted_release_time = release_time + offline_duration
+                ongoing_notifications[i] = (series_abbr, chapter_number, adjusted_release_time)
     save_state()
 
 @tasks.loop(minutes=1)
@@ -171,6 +187,15 @@ async def on_message(message):
         await bot.process_commands(message)
     else:
         await bot.process_commands(message)
+
+    # Automatically spoiler-tag images
+    if message.attachments:
+        for attachment in message.attachments:
+            if not attachment.is_spoiler():
+                await message.delete()
+                spoiler_files = [await attachment.to_file(spoiler=True) for attachment in message.attachments]
+                await message.channel.send(files=spoiler_files)
+                break
 
 # Flask app to keep the hosting service alive
 app = Flask(__name__)
