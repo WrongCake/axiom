@@ -14,8 +14,6 @@ load_dotenv()
 intents = discord.Intents.default()
 if hasattr(intents, 'message_content'):
     intents.message_content = True
-else:
-    print("The current version of discord.py does not support 'message_content' intent. Please update to discord.py 2.0 or higher.")
 
 # Create bot instance
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -63,7 +61,7 @@ def load_state():
         with open(STATE_FILE, 'r') as f:
             data = json.load(f)
             ongoing_notifications = [(item['series_abbr'], item['chapter_number'], datetime.fromisoformat(item['release_time'])) for item in data]
-            print("State loaded from file.")
+            print("State loaded from file:", ongoing_notifications)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print("No previous state found or error loading state:", e)
 
@@ -77,13 +75,16 @@ def load_last_run_time():
     try:
         with open(LAST_RUN_FILE, 'r') as f:
             last_run = f.read().strip()
+            print("Last run time loaded:", last_run)
             return datetime.fromisoformat(last_run)
     except (FileNotFoundError, ValueError):
         return None
 
 def save_last_run_time():
     with open(LAST_RUN_FILE, 'w') as f:
-        f.write(datetime.utcnow().isoformat())
+        last_run_time = datetime.utcnow().isoformat()
+        f.write(last_run_time)
+        print("Last run time saved:", last_run_time)
 
 @bot.event
 async def on_ready():
@@ -136,10 +137,12 @@ async def adjust_remaining_time():
     last_run = load_last_run_time()
     if last_run:
         offline_duration = now - last_run
+        print("Offline duration:", offline_duration)
         for i, (series_abbr, chapter_number, release_time) in enumerate(ongoing_notifications):
             if release_time > last_run:
                 adjusted_release_time = release_time + offline_duration
                 ongoing_notifications[i] = (series_abbr, chapter_number, adjusted_release_time)
+                print(f"Adjusted release time for {series_abbr} {chapter_number} to {adjusted_release_time}")
     save_state()
 
 @tasks.loop(minutes=1)
