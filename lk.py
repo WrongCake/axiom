@@ -77,7 +77,8 @@ def load_last_run_time():
             last_run = f.read().strip()
             print("Last run time loaded:", last_run)
             return datetime.fromisoformat(last_run)
-    except (FileNotFoundError, ValueError):
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error loading last run time: {e}")
         return None
 
 def save_last_run_time():
