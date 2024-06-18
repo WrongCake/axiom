@@ -89,18 +89,21 @@ def save_last_run_time():
 
 @bot.event
 async def on_ready():
-    print(f'Bot is ready as {bot.user}')
-    load_state()
-    await adjust_remaining_time()
-    update_time_remaining.start()
-    # Sending a message to indicate bot is ready
-    ready_channel = bot.get_channel(ready_channel_id)
-    if ready_channel:
-        await ready_channel.send("I am ready!")
-    save_last_run_time()
+    if not update_time_remaining.is_running():
+        print(f'Bot is ready as {bot.user}')
+        load_state()
+        await adjust_remaining_time()
+        update_time_remaining.start()
+        # Sending a message to indicate bot is ready
+        ready_channel = bot.get_channel(ready_channel_id)
+        if ready_channel:
+            await ready_channel.send("I am ready!")
+        save_last_run_time()
+    else:
+        print("update_time_remaining task is already running.")
 
 @bot.command()
-async def notify(ctx, series_abbr: str, chapter_number: int, duration: int):
+async def notify(ctx, series_abbr: str, chapter_number: int, hours: int, minutes: int):
     series = series_info.get(series_abbr.upper())
     if not series:
         await ctx.send("Series not found.")
@@ -111,7 +114,7 @@ async def notify(ctx, series_abbr: str, chapter_number: int, duration: int):
     vip_channel = bot.get_channel(vip_channel_id)
     await vip_channel.send(vip_message)
 
-    release_time = datetime.utcnow() + timedelta(hours=duration)
+    release_time = datetime.utcnow() + timedelta(hours=hours, minutes=minutes)
     ongoing_notifications.append((series_abbr.upper(), chapter_number, release_time))
     save_state()
 
@@ -185,9 +188,7 @@ async def update_time_remaining():
 
 @bot.event
 async def on_message(message):
-    if message.channel.id == ready_channel_id and message.content.startswith('!notify'):
-        await bot.process_commands(message)
-    elif message.channel.id == ready_channel_id and message.content.startswith('!release'):
+    if message.channel.id == ready_channel_id and (message.content.startswith('!notify') or message.content.startswith('!release')):
         await bot.process_commands(message)
     else:
         await bot.process_commands(message)
